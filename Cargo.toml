@@ -15,5 +15,5 @@ thiserror    = { version = "1.0.69" }
 tracing      = { version = "0.1.41" }
 async-trait  = { version = "0.1.88" }
 sqlx         = { version = "0.8.3", features = ["postgres", "runtime-tokio", "macros", "migrate"] }
-stellar-xdr  = { version = "21.2.0" }
+stellar-xdr  = { version = "21.2.0", features = ["base64"] }
 anyhow       = { version = "1.0.98" }
