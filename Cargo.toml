@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "crates/indexer-core",
+    "crates/ingestion",
+    "crates/storage",
+    "crates/graphql",
+]
+resolver = "2"
+
+[workspace.dependencies]
+tokio        = { version = "1.44.2", features = ["full"] }
+serde        = { version = "1.0.228", features = ["derive"] }
+serde_json   = { version = "1.0.149" }
+thiserror    = { version = "1.0.69" }
+tracing      = { version = "0.1.41" }
+async-trait  = { version = "0.1.88" }
+sqlx         = { version = "0.8.3", features = ["postgres", "runtime-tokio", "macros", "migrate"] }
+stellar-xdr  = { version = "21.2.0" }
+anyhow       = { version = "1.0.98" }

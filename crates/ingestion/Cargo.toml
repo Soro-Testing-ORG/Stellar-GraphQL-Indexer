@@ -1,0 +1,15 @@
+[package]
+name = "ingestion"
+version = "0.1.0"
+edition = "2021"
+description = "Streams ledger data from Stellar Horizon/RPC and decodes XDR"
+
+[dependencies]
+tokio       = { workspace = true }
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+async-trait = { workspace = true }
+stellar-xdr = { workspace = true }
+reqwest     = { version = "0.12.15", features = ["json"] }

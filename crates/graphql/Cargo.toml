@@ -1,0 +1,16 @@
+[package]
+name = "graphql"
+version = "0.1.0"
+edition = "2021"
+description = "GraphQL schema and resolvers for the Stellar indexer"
+
+[dependencies]
+storage     = { path = "../storage" }
+tokio       = { workspace = true }
+serde       = { workspace = true }
+thiserror   = { workspace = true }
+tracing     = { workspace = true }
+async-graphql       = { version = "7.0.15", features = ["tracing"] }
+async-graphql-axum  = { version = "7.0.15" }
+axum                = { version = "0.8.4" }
+anyhow              = { workspace = true }
