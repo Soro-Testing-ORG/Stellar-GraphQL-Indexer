@@ -32,6 +32,7 @@ pub trait StorageBackend: Send + Sync {
 
 /// Postgres-backed storage using sqlx.
 pub struct Db {
+    #[allow(dead_code)]
     pool: PgPool,
 }
 

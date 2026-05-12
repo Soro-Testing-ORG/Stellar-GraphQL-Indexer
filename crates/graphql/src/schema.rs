@@ -1,9 +1,8 @@
 //! GraphQL schema — types and resolvers.
-//!
-//! Each GraphQL type maps to a storage model. Resolvers call into the
-//! [`StorageBackend`] trait so they work with any backend (Postgres or mock).
 
-use async_graphql::{Object, SimpleObject, Schema, EmptyMutation, EmptySubscription};
+#![allow(unreachable_code)] // todo!() stubs in resolvers are intentional
+
+use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 
 /// GraphQL representation of an indexed transaction.
 #[derive(SimpleObject)]
