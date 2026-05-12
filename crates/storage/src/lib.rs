@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use sqlx::PgPool;
 use thiserror::Error;
 
-use crate::models::{StoredTransaction, StoredContractEvent};
+use crate::models::{StoredContractEvent, StoredTransaction};
 
 #[derive(Debug, Error)]
 pub enum StorageError {

@@ -4,9 +4,9 @@
 //! # TODO
 //! Implement each query using `sqlx::query_as!` macros.
 
-use sqlx::PgPool;
-use crate::models::{StoredTransaction, StoredContractEvent};
+use crate::models::{StoredContractEvent, StoredTransaction};
 use crate::StorageError;
+use sqlx::PgPool;
 
 /// Inserts a transaction row. Ignores conflicts on `hash` (idempotent).
 ///

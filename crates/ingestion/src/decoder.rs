@@ -18,10 +18,7 @@ pub fn decode_transaction(
         .ok_or_else(|| IngestionError::Xdr("missing hash".into()))?
         .to_string();
 
-    let source_account = record["source_account"]
-        .as_str()
-        .unwrap_or("")
-        .to_string();
+    let source_account = record["source_account"].as_str().unwrap_or("").to_string();
 
     let fee = record["fee_charged"]
         .as_str()

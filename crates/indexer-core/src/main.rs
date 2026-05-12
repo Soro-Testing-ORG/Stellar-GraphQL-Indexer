@@ -11,9 +11,7 @@ async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
 
     tracing_subscriber::fmt()
-        .with_env_filter(
-            std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into()),
-        )
+        .with_env_filter(std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into()))
         .init();
 
     info!("stellar-graphql-indexer starting");

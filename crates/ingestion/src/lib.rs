@@ -3,11 +3,11 @@
 //! The main entry point is [`LedgerStream`], which yields [`LedgerBundle`]s
 //! containing the decoded data for each closed ledger.
 
-pub mod horizon;
 pub mod decoder;
+pub mod horizon;
 pub mod types;
 
-pub use types::{LedgerBundle, Transaction, Operation, ContractEvent};
+pub use types::{ContractEvent, LedgerBundle, Operation, Transaction};
 
 use async_trait::async_trait;
 use thiserror::Error;
