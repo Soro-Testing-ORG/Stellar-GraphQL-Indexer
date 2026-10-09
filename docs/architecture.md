@@ -79,10 +79,10 @@ Owns all network I/O and XDR decoding. Nothing outside this crate talks to Stell
 
 **Implementation status:**
 - ✅ `horizon::get_ledger` — fetches ledger JSON from Horizon
-- ✅ `horizon::get_transactions` — fetches transaction page
+- ⚠️ `horizon::get_transactions` — currently reads one page; pagination is tracked in issue #3
 - ✅ `decoder::decode_transaction` — decodes Horizon JSON + `TransactionEnvelope` XDR
-- 🔲 `decoder::decode_contract_events` — parse `TransactionMeta` XDR (contributor issue #1)
-- 🔲 `LedgerStream::next_ledger` — polling loop (contributor issue #2)
+- ✅ `decoder::decode_contract_events` — parses `TransactionMeta` XDR for Soroban events
+- ✅ `LedgerStream::next_ledger` — fetches a ledger bundle and advances the cursor
 
 ---
 
@@ -100,10 +100,9 @@ Owns all database access. Nothing outside this crate writes SQL.
 - `Db` — Postgres-backed implementation using `sqlx`
 
 **Implementation status:**
-- 🔲 `Db::connect` — connect + run migrations
-- 🔲 `queries::insert_transaction`
-- 🔲 `queries::insert_contract_event`
-- 🔲 `queries::get_latest_ledger`
+- ✅ `Db::connect` — pooled connection and migrations
+- ✅ transaction/event reads and idempotent writes
+- ✅ ledger checkpoint persistence, atomic with transaction/event writes
 
 ---
 
@@ -117,10 +116,10 @@ Owns the HTTP server and GraphQL schema. Depends only on `storage` — never imp
 | `src/server.rs` | `server::start(port)` — axum HTTP server |
 
 **Implementation status:**
-- 🔲 `QueryRoot::transaction`
-- 🔲 `QueryRoot::transactions`
-- 🔲 `QueryRoot::contract_events`
-- 🔲 `server::start`
+- ✅ `QueryRoot::transaction`
+- ✅ `QueryRoot::transactions`
+- ✅ `QueryRoot::contract_events`
+- ✅ GraphQL HTTP server with graceful shutdown
 
 ---
 
@@ -132,9 +131,9 @@ Binary entry point. Loads config from env, wires the three crates together, hand
 | `src/main.rs` | Startup — config, DB connect, spawn ingestion loop, start GraphQL server |
 
 **Implementation status:**
-- 🔲 Config loading from env
-- 🔲 Wire ingestion → storage pipeline
-- 🔲 Start GraphQL server
+- ✅ Config loading from environment
+- ✅ Wire ingestion → transactional storage pipeline
+- ✅ Start GraphQL server
 
 ---
 
@@ -157,6 +156,7 @@ CREATE INDEX idx_transactions_source ON transactions (source_account);
 
 CREATE TABLE contract_events (
     id               BIGSERIAL   PRIMARY KEY,
+    event_index      INTEGER     NOT NULL,
     contract_id      TEXT        NOT NULL,
     ledger_sequence  INTEGER     NOT NULL,
     tx_hash          TEXT        NOT NULL REFERENCES transactions(hash),
@@ -166,6 +166,13 @@ CREATE TABLE contract_events (
 
 CREATE INDEX idx_events_contract ON contract_events (contract_id);
 CREATE INDEX idx_events_ledger   ON contract_events (ledger_sequence);
+CREATE UNIQUE INDEX idx_events_tx_event ON contract_events (tx_hash, event_index);
+
+CREATE TABLE ledger_checkpoints (
+    sequence INTEGER PRIMARY KEY,
+    closed_at BIGINT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 ```
 
 ---
@@ -194,6 +201,7 @@ type ContractEvent {
   ledgerSequence: Int!
   txHash: String!
   topics: [String!]!
+  data: JSON!
 }
 ```
 
@@ -234,7 +242,7 @@ All config is loaded from environment variables. See `.env.example` for defaults
 | `HORIZON_URL` | Stellar Horizon endpoint | `https://horizon-testnet.stellar.org` |
 | `SOROBAN_RPC_URL` | Soroban RPC endpoint (optional) | `https://soroban-testnet.stellar.org` |
 | `DATABASE_URL` | Postgres connection string | `postgres://postgres:postgres@localhost:5432/stellar_indexer` |
-| `START_LEDGER` | Ledger sequence to start from | `latest` |
+| `START_LEDGER` | Optional minimum ledger sequence; otherwise resumes after the last checkpoint (fresh databases start at ledger 1) | unset |
 | `GRAPHQL_PORT` | Port for the GraphQL server | `4000` |
 | `LOG_LEVEL` | Tracing log level | `info` |
 
@@ -255,8 +263,9 @@ cargo run -p indexer-core       # start the indexer
 cargo test --all
 ```
 
-Storage tests use an in-memory `StorageBackend` — no database required.
-Ingestion tests that hit Horizon are marked `#[ignore]` and run with:
+GraphQL resolver tests use an in-memory `StorageBackend` — no database required.
+Database migration and Horizon integration tests are tracked in issue #4.
+Ingestion tests that hit Horizon can be run with:
 ```bash
 cargo test --all -- --include-ignored
 ```

@@ -36,6 +36,7 @@ pub trait LedgerSource: Send + Sync {
 pub struct LedgerStream {
     pub horizon_url: String,
     pub cursor: u32,
+    client: reqwest::Client,
 }
 
 impl LedgerStream {
@@ -43,6 +44,7 @@ impl LedgerStream {
         Self {
             horizon_url: horizon_url.into(),
             cursor: start_ledger,
+            client: reqwest::Client::new(),
         }
     }
 }
@@ -50,14 +52,15 @@ impl LedgerStream {
 #[async_trait]
 impl LedgerSource for LedgerStream {
     async fn next_ledger(&mut self) -> Result<LedgerBundle, IngestionError> {
-        let client = reqwest::Client::new();
-        let ledger = horizon::get_ledger(&client, &self.horizon_url, self.cursor).await?;
+        let ledger = horizon::get_ledger(&self.client, &self.horizon_url, self.cursor).await?;
 
         let sequence = ledger["sequence"]
             .as_u64()
-            .ok_or(IngestionError::Xdr("missing ledger sequence".into()))? as u32;
+            .ok_or(IngestionError::Xdr("missing ledger sequence".into()))?
+            as u32;
 
-        let tx_records = horizon::get_transactions(&client, &self.horizon_url, sequence).await?;
+        let tx_records =
+            horizon::get_transactions(&self.client, &self.horizon_url, sequence).await?;
 
         let transactions = tx_records
             .iter()
@@ -66,7 +69,9 @@ impl LedgerSource for LedgerStream {
 
         let mut contract_events = Vec::new();
         for tx in &tx_records {
-            let tx_hash = tx["hash"].as_str().unwrap_or_default();
+            let tx_hash = tx["hash"]
+                .as_str()
+                .ok_or_else(|| IngestionError::Xdr("transaction record missing hash".into()))?;
             if let Some(meta) = tx["result_meta_xdr"].as_str() {
                 contract_events.extend(decoder::decode_contract_events(meta, sequence, tx_hash)?);
             }
@@ -74,9 +79,10 @@ impl LedgerSource for LedgerStream {
 
         let closed_at = ledger["closed_at"]
             .as_str()
-            .and_then(|v| v.parse::<i64>().ok())
+            .and_then(|v| chrono::DateTime::parse_from_rfc3339(v).ok())
+            .map(|dt| dt.timestamp())
             .or_else(|| ledger["closed_at"].as_i64())
-            .unwrap_or(0);
+            .ok_or_else(|| IngestionError::Xdr("missing or invalid ledger closed_at".into()))?;
 
         let bundle = LedgerBundle {
             sequence,

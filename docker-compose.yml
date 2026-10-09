@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -17,10 +18,13 @@ services:
 
   indexer:
     build: .
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql://postgres:postgres@postgres:5432/stellar_indexer}
     ports:
       - "4000:4000"
 

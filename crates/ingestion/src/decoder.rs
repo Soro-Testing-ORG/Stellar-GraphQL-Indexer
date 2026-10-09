@@ -90,7 +90,9 @@ fn scval_to_json(value: &ScVal) -> Value {
         ScVal::I128(v) => Value::String(format!("{:?}", v)),
         ScVal::U256(v) => Value::String(format!("{:?}", v)),
         ScVal::I256(v) => Value::String(format!("{:?}", v)),
-        ScVal::Bytes(b) => Value::Array(b.iter().map(|byte| Value::Number((*byte).into())).collect()),
+        ScVal::Bytes(b) => {
+            Value::Array(b.iter().map(|byte| Value::Number((*byte).into())).collect())
+        }
         ScVal::String(s) => Value::String(String::from_utf8_lossy(s.as_slice()).into_owned()),
         ScVal::Symbol(s) => Value::String(String::from_utf8_lossy(s.as_slice()).into_owned()),
         ScVal::Vec(items) => items
@@ -101,12 +103,15 @@ fn scval_to_json(value: &ScVal) -> Value {
             .as_ref()
             .map(|inner| {
                 Value::Array(
-                    inner.iter().map(|entry| {
-                        serde_json::json!([
-                            scval_to_json(&entry.key),
-                            scval_to_json(&entry.val)
-                        ])
-                    }).collect(),
+                    inner
+                        .iter()
+                        .map(|entry| {
+                            serde_json::json!([
+                                scval_to_json(&entry.key),
+                                scval_to_json(&entry.val)
+                            ])
+                        })
+                        .collect(),
                 )
             })
             .unwrap_or(Value::Array(vec![])),
@@ -136,10 +141,12 @@ pub fn decode_contract_events(
 
     Ok(events
         .into_iter()
-        .filter_map(|event| match event.body {
-            ContractEventBody::V0(body) => Some((event.contract_id, body)),
+        .map(|event| match event.body {
+            ContractEventBody::V0(body) => (event.contract_id, body),
         })
-        .map(|(contract_id, body)| ContractEvent {
+        .enumerate()
+        .map(|(event_index, (contract_id, body))| ContractEvent {
+            event_index: event_index as u32,
             contract_id: contract_id.map(|id| id.to_string()).unwrap_or_default(),
             ledger_sequence,
             tx_hash: tx_hash.to_string(),

@@ -15,6 +15,7 @@ pub struct StoredTransaction {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct StoredContractEvent {
     pub id: i64,
+    pub event_index: i32,
     pub contract_id: String,
     pub ledger_sequence: i32,
     pub tx_hash: String,

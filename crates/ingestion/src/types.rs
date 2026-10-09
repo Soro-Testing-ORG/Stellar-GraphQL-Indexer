@@ -35,6 +35,7 @@ pub struct Operation {
 /// A Soroban contract event emitted during a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContractEvent {
+    pub event_index: u32,
     pub contract_id: String,
     pub ledger_sequence: u32,
     pub tx_hash: String,

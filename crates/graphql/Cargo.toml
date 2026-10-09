@@ -8,6 +8,7 @@ description = "GraphQL schema and resolvers for the Stellar indexer"
 storage     = { path = "../storage" }
 tokio       = { workspace = true }
 serde       = { workspace = true }
+serde_json  = { workspace = true }
 thiserror   = { workspace = true }
 tracing     = { workspace = true }
 async-trait = { workspace = true }

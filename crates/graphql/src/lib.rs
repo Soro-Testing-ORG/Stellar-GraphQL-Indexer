@@ -6,4 +6,4 @@
 pub mod schema;
 pub mod server;
 
-pub use server::start;
+pub use server::start_with_storage;
