@@ -33,10 +33,6 @@ pub trait LedgerSource: Send + Sync {
 }
 
 /// Streams ledgers from Horizon's `/ledgers` endpoint.
-///
-/// # TODO
-/// Implement polling loop: GET /ledgers?order=asc&cursor={cursor},
-/// decode each ledger's XDR envelope, yield a LedgerBundle.
 pub struct LedgerStream {
     pub horizon_url: String,
     pub cursor: u32,
@@ -54,9 +50,42 @@ impl LedgerStream {
 #[async_trait]
 impl LedgerSource for LedgerStream {
     async fn next_ledger(&mut self) -> Result<LedgerBundle, IngestionError> {
-        // TODO: poll Horizon /ledgers?cursor=self.cursor&order=asc&limit=1
-        // TODO: decode response XDR via decoder::decode_ledger_close
-        // TODO: advance self.cursor
-        todo!("LedgerStream::next_ledger: poll Horizon and decode XDR")
+        let client = reqwest::Client::new();
+        let ledger = horizon::get_ledger(&client, &self.horizon_url, self.cursor).await?;
+
+        let sequence = ledger["sequence"]
+            .as_u64()
+            .ok_or(IngestionError::Xdr("missing ledger sequence".into()))? as u32;
+
+        let tx_records = horizon::get_transactions(&client, &self.horizon_url, sequence).await?;
+
+        let transactions = tx_records
+            .iter()
+            .map(|record| decoder::decode_transaction(record, sequence))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut contract_events = Vec::new();
+        for tx in &tx_records {
+            let tx_hash = tx["hash"].as_str().unwrap_or_default();
+            if let Some(meta) = tx["result_meta_xdr"].as_str() {
+                contract_events.extend(decoder::decode_contract_events(meta, sequence, tx_hash)?);
+            }
+        }
+
+        let closed_at = ledger["closed_at"]
+            .as_str()
+            .and_then(|v| v.parse::<i64>().ok())
+            .or_else(|| ledger["closed_at"].as_i64())
+            .unwrap_or(0);
+
+        let bundle = LedgerBundle {
+            sequence,
+            closed_at,
+            transactions,
+            contract_events,
+        };
+
+        self.cursor = sequence + 1;
+        Ok(bundle)
     }
 }

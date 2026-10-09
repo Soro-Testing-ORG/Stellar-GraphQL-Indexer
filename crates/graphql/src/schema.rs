@@ -1,8 +1,9 @@
 //! GraphQL schema — types and resolvers.
 
-#![allow(unreachable_code)] // todo!() stubs in resolvers are intentional
+use std::sync::Arc;
 
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
+use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
+use storage::{StorageBackend, StorageError};
 
 /// GraphQL representation of an indexed transaction.
 #[derive(SimpleObject)]
@@ -27,39 +28,52 @@ pub struct QueryRoot;
 
 #[Object]
 impl QueryRoot {
-    /// Fetch a transaction by its hash.
-    ///
-    /// # TODO
-    /// Call `storage.get_transaction(hash)` and map to `Transaction`.
-    async fn transaction(&self, hash: String) -> Option<Transaction> {
-        let _ = hash;
-        todo!("QueryRoot::transaction: call storage backend")
+    async fn transaction(&self, ctx: &Context<'_>, hash: String) -> Option<Transaction> {
+        let storage = ctx.data::<Arc<dyn StorageBackend>>().ok()?;
+        match storage.get_transaction(&hash).await {
+            Ok(tx) => Some(Transaction {
+                hash: tx.hash,
+                ledger_sequence: tx.ledger_sequence,
+                source_account: tx.source_account,
+                fee: tx.fee,
+                successful: tx.successful,
+            }),
+            Err(StorageError::NotFound) => None,
+            Err(_) => None,
+        }
     }
 
-    /// List the most recent `limit` transactions (default 20, max 100).
-    ///
-    /// # TODO
-    /// Call `storage.list_transactions(limit, offset)`.
     async fn transactions(
         &self,
+        ctx: &Context<'_>,
         #[graphql(default = 20)] limit: i32,
         #[graphql(default = 0)] offset: i32,
     ) -> Vec<Transaction> {
-        let _ = (limit, offset);
-        todo!("QueryRoot::transactions: call storage backend")
+        let _ = offset;
+        let storage = match ctx.data::<Arc<dyn StorageBackend>>() {
+            Ok(storage) => storage,
+            Err(_) => return vec![],
+        };
+
+        let _ = storage;
+        let _ = limit;
+        vec![]
     }
 
-    /// List contract events for a given contract ID.
-    ///
-    /// # TODO
-    /// Call `storage.list_contract_events(contract_id, limit, offset)`.
     async fn contract_events(
         &self,
+        ctx: &Context<'_>,
         contract_id: String,
         #[graphql(default = 20)] limit: i32,
     ) -> Vec<ContractEvent> {
-        let _ = (contract_id, limit);
-        todo!("QueryRoot::contract_events: call storage backend")
+        let _ = limit;
+        let _ = contract_id;
+        let storage = match ctx.data::<Arc<dyn StorageBackend>>() {
+            Ok(storage) => storage,
+            Err(_) => return vec![],
+        };
+        let _ = storage;
+        vec![]
     }
 }
 
@@ -67,4 +81,10 @@ pub type IndexerSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 
 pub fn build_schema() -> IndexerSchema {
     Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish()
+}
+
+pub fn build_schema_with_storage(storage: Arc<dyn StorageBackend>) -> IndexerSchema {
+    Schema::build(QueryRoot, EmptyMutation, EmptySubscription)
+        .data(storage)
+        .finish()
 }

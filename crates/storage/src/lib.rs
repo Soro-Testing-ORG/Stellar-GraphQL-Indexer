@@ -16,6 +16,8 @@ use crate::models::{StoredContractEvent, StoredTransaction};
 pub enum StorageError {
     #[error("database error: {0}")]
     Db(#[from] sqlx::Error),
+    #[error("database migration error: {0}")]
+    Migration(#[from] sqlx::migrate::MigrateError),
     #[error("record not found")]
     NotFound,
 }
@@ -38,11 +40,9 @@ pub struct Db {
 
 impl Db {
     /// Connects to Postgres and runs pending migrations.
-    ///
-    /// # TODO
-    /// Call `sqlx::migrate!("../../migrations").run(&pool)` after connecting.
     pub async fn connect(database_url: &str) -> Result<Self, StorageError> {
         let pool = PgPool::connect(database_url).await?;
+        sqlx::migrate!("../../migrations").run(&pool).await?;
         Ok(Self { pool })
     }
 }
@@ -50,25 +50,25 @@ impl Db {
 #[async_trait]
 impl StorageBackend for Db {
     async fn insert_transaction(&self, tx: &StoredTransaction) -> Result<(), StorageError> {
-        // TODO: INSERT INTO transactions (...) VALUES (...)
-        let _ = tx;
-        todo!("Db::insert_transaction: sqlx INSERT")
+        queries::insert_transaction(&self.pool, tx).await
     }
 
     async fn insert_contract_event(&self, event: &StoredContractEvent) -> Result<(), StorageError> {
-        // TODO: INSERT INTO contract_events (...) VALUES (...)
-        let _ = event;
-        todo!("Db::insert_contract_event: sqlx INSERT")
+        queries::insert_contract_event(&self.pool, event).await
     }
 
     async fn get_transaction(&self, hash: &str) -> Result<StoredTransaction, StorageError> {
-        // TODO: SELECT * FROM transactions WHERE hash = $1
-        let _ = hash;
-        todo!("Db::get_transaction: sqlx SELECT")
+        let row = sqlx::query_as::<_, StoredTransaction>(
+            "SELECT hash, ledger_sequence, source_account, fee, successful, created_at FROM transactions WHERE hash = $1",
+        )
+        .bind(hash)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.ok_or(StorageError::NotFound)
     }
 
     async fn get_latest_ledger(&self) -> Result<u32, StorageError> {
-        // TODO: SELECT MAX(ledger_sequence) FROM transactions
-        todo!("Db::get_latest_ledger: sqlx SELECT MAX")
+        queries::get_latest_ledger(&self.pool).await
     }
 }

@@ -1,6 +1,9 @@
 //! XDR decoding utilities.
 
-use stellar_xdr::curr::{Limits, ReadXdr, TransactionEnvelope};
+use serde_json::Value;
+use stellar_xdr::curr::{
+    ContractEventBody, Limits, ReadXdr, ScVal, TransactionEnvelope, TransactionMeta,
+};
 
 use crate::types::{ContractEvent, Operation, Transaction};
 use crate::IngestionError;
@@ -72,16 +75,84 @@ fn decode_operations(xdr_b64: &str) -> Result<Vec<Operation>, IngestionError> {
         .collect())
 }
 
+fn scval_to_json(value: &ScVal) -> Value {
+    match value {
+        ScVal::Bool(v) => Value::Bool(*v),
+        ScVal::Void => Value::Null,
+        ScVal::Error(err) => Value::String(format!("ScError::{:?}", err)),
+        ScVal::U32(v) => Value::Number((*v).into()),
+        ScVal::I32(v) => Value::Number((*v).into()),
+        ScVal::U64(v) => Value::String(v.to_string()),
+        ScVal::I64(v) => Value::String(v.to_string()),
+        ScVal::Timepoint(v) => Value::String(format!("{:?}", v)),
+        ScVal::Duration(v) => Value::String(format!("{:?}", v)),
+        ScVal::U128(v) => Value::String(format!("{:?}", v)),
+        ScVal::I128(v) => Value::String(format!("{:?}", v)),
+        ScVal::U256(v) => Value::String(format!("{:?}", v)),
+        ScVal::I256(v) => Value::String(format!("{:?}", v)),
+        ScVal::Bytes(b) => Value::Array(b.iter().map(|byte| Value::Number((*byte).into())).collect()),
+        ScVal::String(s) => Value::String(String::from_utf8_lossy(s.as_slice()).into_owned()),
+        ScVal::Symbol(s) => Value::String(String::from_utf8_lossy(s.as_slice()).into_owned()),
+        ScVal::Vec(items) => items
+            .as_ref()
+            .map(|inner| Value::Array(inner.iter().map(scval_to_json).collect()))
+            .unwrap_or(Value::Array(vec![])),
+        ScVal::Map(items) => items
+            .as_ref()
+            .map(|inner| {
+                Value::Array(
+                    inner.iter().map(|entry| {
+                        serde_json::json!([
+                            scval_to_json(&entry.key),
+                            scval_to_json(&entry.val)
+                        ])
+                    }).collect(),
+                )
+            })
+            .unwrap_or(Value::Array(vec![])),
+        ScVal::Address(addr) => Value::String(format!("{:?}", addr)),
+        ScVal::LedgerKeyContractInstance => Value::String("LedgerKeyContractInstance".to_string()),
+        ScVal::LedgerKeyNonce(v) => Value::String(format!("{:?}", v)),
+        ScVal::ContractInstance(v) => Value::String(format!("{:?}", v)),
+    }
+}
+
 /// Decodes Soroban contract events from a `TransactionMeta` XDR string.
-///
-/// # TODO
-/// 1. Parse `TransactionMeta` XDR using `stellar_xdr::curr::TransactionMeta`
-/// 2. Match on `TransactionMeta::V3` to access `SorobanTransactionMeta.events`
-/// 3. For each event, decode topics and data from `ScVal` to JSON
 pub fn decode_contract_events(
-    _meta_xdr_base64: &str,
-    _ledger_sequence: u32,
-    _tx_hash: &str,
+    meta_xdr_base64: &str,
+    ledger_sequence: u32,
+    tx_hash: &str,
 ) -> Result<Vec<ContractEvent>, IngestionError> {
-    todo!("decoder::decode_contract_events: parse TransactionMeta XDR and extract Soroban events")
+    let meta = TransactionMeta::from_xdr_base64(meta_xdr_base64, Limits::none())
+        .map_err(|e: stellar_xdr::curr::Error| IngestionError::Xdr(e.to_string()))?;
+
+    let events = match meta {
+        TransactionMeta::V3(v) => v
+            .soroban_meta
+            .map(|meta| meta.events.iter().cloned().collect::<Vec<_>>())
+            .unwrap_or_default(),
+        _ => vec![],
+    };
+
+    Ok(events
+        .into_iter()
+        .filter_map(|event| match event.body {
+            ContractEventBody::V0(body) => Some((event.contract_id, body)),
+        })
+        .map(|(contract_id, body)| ContractEvent {
+            contract_id: contract_id.map(|id| id.to_string()).unwrap_or_default(),
+            ledger_sequence,
+            tx_hash: tx_hash.to_string(),
+            topics: body
+                .topics
+                .iter()
+                .map(scval_to_json)
+                .map(|value| match value {
+                    Value::String(s) => s,
+                    _ => value.to_string(),
+                })
+                .collect(),
+            data: scval_to_json(&body.data),
+        })
+        .collect())
 }
